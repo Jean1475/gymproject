@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native'
+import { F } from '../lib/fonts'
 
 export default function RankingScreen() {
   return (
@@ -10,5 +11,5 @@ export default function RankingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111110' },
-  text: { color: '#f5f4f0', fontSize: 18 },
+  text: { fontFamily: F.display.regular, fontSize: 22, color: '#f5f4f0' },
 })

@@ -1,5 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { Feather } from '@expo/vector-icons'
+import { BlurView } from 'expo-blur'
+import { StyleSheet } from 'react-native'
+import { Home, Dumbbell, BarChart3, User } from 'lucide-react-native'
 import FeedScreen from '../screens/FeedScreen'
 import EntrenarScreen from '../screens/EntrenarScreen'
 import RankingScreen from '../screens/RankingScreen'
@@ -7,46 +9,70 @@ import PerfilScreen from '../screens/PerfilScreen'
 
 const Tab = createBottomTabNavigator()
 
-const ACTIVE = '#E8442A'
-const INACTIVE = 'rgba(255,255,255,0.3)'
+const TEXT = '#f5f4f0'
+const MUTED = 'rgba(255,255,255,0.5)'
+const BORDER = 'rgba(255,255,255,0.07)'
 
 export default function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
-        tabBarIcon: ({ focused, size }) => {
-          const icons = {
-            Feed: 'home',
-            Entrenar: 'activity',
-            Ranking: 'award',
-            Perfil: 'user',
-          }
-          return (
-            <Feather
-              name={icons[route.name]}
-              size={size}
-              color={focused ? ACTIVE : INACTIVE}
-            />
-          )
-        },
-        tabBarActiveTintColor: ACTIVE,
-        tabBarInactiveTintColor: INACTIVE,
+        tabBarActiveTintColor: TEXT,
+        tabBarInactiveTintColor: MUTED,
         tabBarStyle: {
-          backgroundColor: '#111110',
+          position: 'absolute',
+          borderTopColor: BORDER,
           borderTopWidth: 0.5,
-          borderTopColor: 'rgba(255,255,255,0.07)',
+          backgroundColor: 'transparent',
+          elevation: 0,
         },
+        tabBarBackground: () => (
+          <BlurView tint="dark" intensity={80} style={StyleSheet.absoluteFill} />
+        ),
         tabBarLabelStyle: {
-          color: '#f5f4f0',
-          fontSize: 11,
+          fontFamily: 'DMSans-Medium',
+          fontSize: 10.5,
+          letterSpacing: 0.1,
         },
-      })}
+      }}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Entrenar" component={EntrenarScreen} />
-      <Tab.Screen name="Ranking" component={RankingScreen} />
-      <Tab.Screen name="Perfil" component={PerfilScreen} />
+      <Tab.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <Home size={24} color={color} fill={focused ? color : 'transparent'} strokeWidth={1.6} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Entrenar"
+        component={EntrenarScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Dumbbell size={24} color={color} strokeWidth={1.6} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Ranking"
+        component={RankingScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <BarChart3 size={24} color={color} strokeWidth={1.6} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Perfil"
+        component={PerfilScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <User size={24} color={color} fill={focused ? color : 'transparent'} strokeWidth={1.6} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   )
 }

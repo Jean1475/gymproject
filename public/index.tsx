@@ -1,17 +1,25 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+// V5 Home — Hybrid (header con racha + stories rectangulares + destacado + feed)
+// Todo el V5 portado a React Native (Expo) en un solo archivo.
+//
+// Requisitos:
+//   npx expo install expo-blur expo-linear-gradient expo-image
+//   npx expo install @expo-google-fonts/playfair-display @expo-google-fonts/dm-sans expo-font
+//
+// Asume que las fuentes se cargan en app/_layout.tsx (ver plantilla más abajo).
+
+import React from 'react';
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   StyleSheet,
+  Dimensions,
   StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
-import { supabase } from '../lib/supabase';
 import {
   Heart,
   MessageCircle,
@@ -36,10 +44,10 @@ const theme = {
   textMuted: 'rgba(255,255,255,0.5)',
   border: 'rgba(255,255,255,0.07)',
   accent: '#E8442A',
-  fontDisplay: 'PlayfairDisplay-Medium',
-  fontDisplay600: 'PlayfairDisplay-SemiBold',
-  fontBody: 'DMSans-Regular',
-  fontBodyMedium: 'DMSans-Medium',
+  fontDisplay: 'PlayfairDisplay_500Medium',
+  fontDisplay600: 'PlayfairDisplay_600SemiBold',
+  fontBody: 'DMSans_400Regular',
+  fontBodyMedium: 'DMSans_500Medium',
 };
 
 // ============================================================================
@@ -55,7 +63,16 @@ const ME = {
   streak: 12,
 };
 
-const STORIES = [
+type Story = {
+  id: string;
+  name: string;
+  avatar: string;
+  isMe?: boolean;
+  live?: boolean;
+  pr?: boolean;
+};
+
+const STORIES: Story[] = [
   { id: 's0', name: 'Tu día', avatar: ME.avatar, isMe: true },
   { id: 's1', name: 'Marco', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80', live: true },
   { id: 's2', name: 'Lucía', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80' },
@@ -66,7 +83,23 @@ const STORIES = [
   { id: 's7', name: 'Iván', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80' },
 ];
 
-const FEED_POSTS = [
+type Post = {
+  id: string;
+  user: { name: string; handle: string; avatar: string };
+  photo: string;
+  timeAgo: string;
+  workoutType: string;
+  duration: string;
+  volume: string;
+  prHit: boolean;
+  prText?: string;
+  caption: string;
+  music: { title: string; artist: string; cover: string };
+  likes: number;
+  comments: number;
+};
+
+const FEED_POSTS: Post[] = [
   {
     id: 'p1',
     user: { name: 'Marco', handle: 'marco.lift', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80' },
@@ -128,50 +161,24 @@ const FEED_POSTS = [
 ];
 
 // ============================================================================
-// HELPERS
+// HEADER (saludo + racha en coral + stats)
 // ============================================================================
 
-function timeAgoShort(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-  if (mins < 60) return `${mins}m`;
-  if (hours < 24) return `${hours}h`;
-  return `${days}d`;
-}
-
-function formatDuration(secs) {
-  if (!secs) return '—';
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatVolume(kg) {
-  if (!kg || kg === 0) return '—';
-  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}k kg`;
-  return `${Math.round(kg)} kg`;
-}
-
-// ============================================================================
-// HEADER
-// ============================================================================
-
-function Header({ avatarUrl, userName }) {
+function Header() {
   return (
     <View style={{ paddingHorizontal: 20, paddingTop: 6 }}>
+      {/* Greeting row */}
       <View style={styles.headerRow}>
         <Text style={styles.greeting}>
-          Hola, <Text style={{ fontStyle: 'italic' }}>{userName || ME.name}</Text>
+          Hola, <Text style={{ fontStyle: 'italic' }}>{ME.name}</Text>
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Bell size={22} color={theme.text} strokeWidth={1.6} />
-          <Image source={avatarUrl || ME.avatar} style={{ width: 30, height: 30, borderRadius: 999 }} />
+          <Image source={ME.avatar} style={{ width: 30, height: 30, borderRadius: 999 }} />
         </View>
       </View>
 
+      {/* Hero stats: streak (coral) + week */}
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
         <View style={{ flex: 2 }}>
           <LinearGradient
@@ -185,6 +192,7 @@ function Header({ avatarUrl, userName }) {
               <Text style={styles.streakValue}>{ME.streak}</Text>
               <Text style={styles.streakLabel}>días seguidos</Text>
             </View>
+            {/* Decorative flame */}
             <View style={styles.flameDecor} pointerEvents="none">
               <Flame size={120} color="#fff" strokeWidth={1} />
             </View>
@@ -201,7 +209,7 @@ function Header({ avatarUrl, userName }) {
 }
 
 // ============================================================================
-// STORIES RAIL
+// STORIES RAIL (rectángulos verticales)
 // ============================================================================
 
 function StoriesRail() {
@@ -218,8 +226,7 @@ function StoriesRail() {
   );
 }
 
-function StoryCard({ story: s }) {
-  const navigation = useNavigation();
+function StoryCard({ story: s }: { story: Story }) {
   const borderColor = s.isMe
     ? theme.border
     : s.live || s.pr
@@ -229,8 +236,7 @@ function StoryCard({ story: s }) {
   const borderStyle = s.isMe ? 'dashed' : 'solid';
 
   return (
-    <Pressable
-      onPress={s.isMe ? () => navigation.navigate('Compartir') : undefined}
+    <View
       style={{
         width: 92,
         height: 130,
@@ -253,6 +259,7 @@ function StoryCard({ story: s }) {
         </>
       )}
 
+      {/* Top badge */}
       {s.live && (
         <View style={[styles.storyBadge, { backgroundColor: theme.accent }]}>
           <View style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: 'white' }} />
@@ -277,21 +284,22 @@ function StoryCard({ story: s }) {
           {s.name}
         </Text>
       )}
-    </Pressable>
+    </View>
   );
 }
 
 // ============================================================================
-// POST CARD
+// POST CARD (estilo V2)
 // ============================================================================
 
-function PostCard({ post }) {
+function PostCard({ post }: { post: Post }) {
   const [liked, setLiked] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
   return (
     <View style={{ marginBottom: 18, paddingHorizontal: 14 }}>
       <View style={styles.postCard}>
+        {/* Header */}
         <View style={styles.postHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
             <Image source={post.user.avatar} style={{ width: 34, height: 34, borderRadius: 999 }} />
@@ -312,6 +320,7 @@ function PostCard({ post }) {
           <MoreHorizontal size={22} color={theme.textMuted} strokeWidth={1.8} />
         </View>
 
+        {/* Photo with floating stat pills */}
         <View>
           <Image source={post.photo} style={{ width: '100%', height: 380 }} contentFit="cover" />
           <View style={styles.statPillsRow}>
@@ -320,11 +329,12 @@ function PostCard({ post }) {
               <Text style={styles.statPillText}>{post.duration}</Text>
             </View>
             <View style={styles.statPill}>
-              <Text style={styles.statPillText}>{post.volume}</Text>
+              <Text style={[styles.statPillText, { fontVariant: ['tabular-nums'] }]}>{post.volume}</Text>
             </View>
           </View>
         </View>
 
+        {/* Actions */}
         <View style={styles.actionsRow}>
           <Pressable
             onPress={() => setLiked((v) => !v)}
@@ -356,6 +366,7 @@ function PostCard({ post }) {
           </View>
         </View>
 
+        {/* Caption */}
         <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
           <Text style={styles.caption}>
             <Text style={{ fontFamily: theme.fontBodyMedium }}>{post.user.handle}</Text>{' '}
@@ -363,109 +374,31 @@ function PostCard({ post }) {
           </Text>
         </View>
 
-        {post.music && (
-          <View style={styles.musicBar}>
-            <Image source={post.music.cover} style={{ width: 26, height: 26, borderRadius: 6 }} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.musicTitle} numberOfLines={1}>{post.music.title}</Text>
-              <Text style={styles.musicArtist} numberOfLines={1}>{post.music.artist}</Text>
-            </View>
-            <Music size={14} color={theme.textMuted} strokeWidth={2} />
+        {/* Music */}
+        <View style={styles.musicBar}>
+          <Image source={post.music.cover} style={{ width: 26, height: 26, borderRadius: 6 }} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.musicTitle} numberOfLines={1}>
+              {post.music.title}
+            </Text>
+            <Text style={styles.musicArtist} numberOfLines={1}>
+              {post.music.artist}
+            </Text>
           </View>
-        )}
+          <Music size={14} color={theme.textMuted} strokeWidth={2} />
+        </View>
       </View>
     </View>
   );
 }
 
 // ============================================================================
-// FEED SCREEN
+// HOME SCREEN (V5 final)
 // ============================================================================
 
 export default function FeedScreen() {
-  const route = useRoute();
-  const [avatarUrl, setAvatarUrl] = useState(null);
-  const [userName, setUserName]   = useState(null);
-  const [realPosts, setRealPosts] = useState([]);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !mountedRef.current) return;
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('avatar_url, name')
-      .eq('id', user.id)
-      .single();
-
-    if (mountedRef.current && profile) {
-      if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
-      if (profile.name) setUserName(profile.name);
-    }
-
-    const { data: posts, error: postsError } = await supabase
-      .from('posts')
-      .select('id, photo_url, caption, workout_type, duration_seconds, volume_kg, created_at, user_id')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (postsError) {
-      console.error('[Feed] posts:', postsError.message);
-      return;
-    }
-    if (!mountedRef.current || !posts || posts.length === 0) return;
-
-    const userIds = [...new Set(posts.map((p) => p.user_id))];
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, name, handle, avatar_url')
-      .in('id', userIds);
-
-    const profileMap = {};
-    if (profiles) profiles.forEach((p) => { profileMap[p.id] = p; });
-
-    if (mountedRef.current) {
-      setRealPosts(posts.map((p) => {
-        const prof = profileMap[p.user_id] || {};
-        return {
-          id: p.id,
-          user: {
-            name: prof.name || 'Usuario',
-            handle: prof.handle || 'usuario',
-            avatar: prof.avatar_url || ME.avatar,
-          },
-          photo: p.photo_url,
-          timeAgo: timeAgoShort(p.created_at),
-          workoutType: p.workout_type || 'Entreno',
-          duration: formatDuration(p.duration_seconds),
-          volume: formatVolume(p.volume_kg),
-          prHit: false,
-          caption: p.caption || '',
-          music: null,
-          likes: 0,
-          comments: 0,
-        };
-      }));
-    }
-  }, []);
-
-  // Recarga cuando la pantalla vuelve a tener foco
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
-
-  // Recarga cuando CompartirScreen navega aquí con { refresh: timestamp }
-  useEffect(() => {
-    if (route.params?.refresh) loadData();
-  }, [route.params?.refresh]);
-
-  const allPosts = [...realPosts, ...FEED_POSTS];
-  const featured = allPosts.find((p) => p.prHit) || allPosts[0];
-  const rest = allPosts.filter((p) => p.id !== featured?.id);
+  const featured = FEED_POSTS.find((p) => p.prHit) || FEED_POSTS[0];
+  const rest = FEED_POSTS.filter((p) => p.id !== featured.id);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top']}>
@@ -475,7 +408,7 @@ export default function FeedScreen() {
         contentContainerStyle={{ paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
       >
-        <Header avatarUrl={avatarUrl} userName={userName} />
+        <Header />
 
         <View style={{ paddingHorizontal: 20, paddingBottom: 8, paddingTop: 4 }}>
           <Text style={styles.eyebrow}>HOY EN TU CÍRCULO</Text>
@@ -483,16 +416,14 @@ export default function FeedScreen() {
 
         <StoriesRail />
 
-        {featured && (
-          <>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>Destacado de hoy</Text>
-              <Text style={styles.sectionMeta}>{featured.timeAgo}</Text>
-            </View>
-            <PostCard post={featured} />
-          </>
-        )}
+        {/* Destacado de hoy */}
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Destacado de hoy</Text>
+          <Text style={styles.sectionMeta}>{featured.timeAgo}</Text>
+        </View>
+        <PostCard post={featured} />
 
+        {/* Tu feed */}
         <View style={[styles.sectionTitleRow, { paddingTop: 6 }]}>
           <Text style={styles.sectionTitle}>Tu feed</Text>
           <Text style={[styles.sectionMeta, { color: theme.accent }]}>Filtros</Text>
@@ -510,6 +441,7 @@ export default function FeedScreen() {
 // ============================================================================
 
 const styles = StyleSheet.create({
+  // Header
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -580,6 +512,8 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     marginTop: 3,
   },
+
+  // Stories
   storyBadge: {
     position: 'absolute',
     top: 8,
@@ -631,6 +565,8 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+
+  // Section titles
   sectionTitleRow: {
     paddingHorizontal: 20,
     paddingBottom: 10,
@@ -649,6 +585,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: theme.textMuted,
   },
+
+  // Post card
   postCard: {
     backgroundColor: theme.card,
     borderRadius: 16,

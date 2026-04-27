@@ -1,6 +1,10 @@
 import { useState } from 'react'
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, Platform } from 'react-native'
+import {
+  Alert, KeyboardAvoidingView, Platform, StyleSheet,
+  Text, TextInput, TouchableOpacity, View,
+} from 'react-native'
 import { supabase } from '../lib/supabase'
+import { F } from '../lib/fonts'
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('')
@@ -15,7 +19,10 @@ export default function LoginScreen({ navigation }) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View style={styles.inner}>
         <Text style={styles.title}>GymApp</Text>
         <Text style={styles.subtitle}>Entrena. Compite. Mejora.</Text>
@@ -39,12 +46,12 @@ export default function LoginScreen({ navigation }) {
           secureTextEntry
         />
 
-        <TouchableOpacity style={styles.buttonPrimary} onPress={handleLogin} disabled={loading}>
-          <Text style={styles.buttonPrimaryText}>{loading ? 'Entrando...' : 'Entrar'}</Text>
+        <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>
+          <Text style={styles.btnPrimaryText}>{loading ? 'Entrando...' : 'Entrar'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.buttonSecondary} onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.buttonSecondaryText}>Crear cuenta</Text>
+        <TouchableOpacity style={styles.btnSecondary} onPress={() => navigation.navigate('Register')}>
+          <Text style={styles.btnSecondaryText}>Crear cuenta</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -53,10 +60,27 @@ export default function LoginScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111110' },
-  inner: { flex: 1, justifyContent: 'center', padding: 24 },
-  title: { fontSize: 36, fontWeight: '600', color: '#f5f4f0', textAlign: 'center', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 40 },
+  inner: { flex: 1, justifyContent: 'center', padding: 28 },
+
+  title: {
+    fontFamily: F.display.semiBold,
+    fontSize: 40,
+    color: '#f5f4f0',
+    textAlign: 'center',
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontFamily: F.body.light,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    marginBottom: 44,
+    letterSpacing: 0.3,
+  },
+
   input: {
+    fontFamily: F.body.regular,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -67,7 +91,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#f5f4f0',
   },
-  buttonPrimary: {
+
+  btnPrimary: {
     backgroundColor: '#E8442A',
     borderRadius: 999,
     padding: 16,
@@ -75,13 +100,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  buttonPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  buttonSecondary: {
+  btnPrimaryText: {
+    fontFamily: F.body.medium,
+    color: '#fff',
+    fontSize: 16,
+  },
+
+  btnSecondary: {
     borderRadius: 999,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.3)',
     padding: 16,
     alignItems: 'center',
   },
-  buttonSecondaryText: { color: '#fff', fontSize: 16, fontWeight: '400' },
+  btnSecondaryText: {
+    fontFamily: F.body.regular,
+    color: '#f5f4f0',
+    fontSize: 16,
+  },
 })

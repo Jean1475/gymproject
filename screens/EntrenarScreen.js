@@ -51,6 +51,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Alert,
+  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -62,7 +63,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Image } from 'expo-image'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
   Play,
@@ -75,8 +77,12 @@ import {
   TrendingUp,
   Calendar,
   Zap,
+  Check,
+  Search,
 } from 'lucide-react-native'
 import { supabase } from '../lib/supabase'
+
+const EXERCISEDB_API_KEY = 'fcc5956332msh6b1ce0d97649d3fp1ba945jsnf388d5dab124'
 
 // ============================================================================
 // THEME
@@ -144,6 +150,26 @@ function calcVolume(exercises) {
   if (total === 0) return '0 kg'
   if (total >= 1000) return `${(total / 1000).toFixed(1)}k kg`
   return `${Math.round(total)} kg`
+}
+
+async function getExerciseSuggestion(exerciseName, userId) {
+  const { data, error } = await supabase.rpc('get_exercise_history', {
+    p_user_id: userId,
+    p_exercise_name: exerciseName,
+  })
+
+  if (error || !data || data.length === 0) return null
+
+  const last = data[0]
+  const shouldIncrease = last.all_completed && last.max_weight > 0
+
+  return {
+    weight: shouldIncrease ? last.max_weight + 2.5 : last.max_weight,
+    reps: last.max_reps,
+    isIncrease: shouldIncrease,
+    lastWeight: last.max_weight,
+    lastReps: last.max_reps,
+  }
 }
 
 // ============================================================================
@@ -230,11 +256,14 @@ function ActiveScreen({
   onAddExercise,
   onAddSet, onRemoveSet,
   onUpdateSet,
+  onToggleComplete,
   onRemoveExercise,
   onFinish,
   onCancel,
   saving,
 }) {
+  const insets = useSafeAreaInsets()
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top']}>
       <StatusBar barStyle="light-content" />
@@ -299,6 +328,7 @@ function ActiveScreen({
               onAddSet={() => onAddSet(ex.id)}
               onRemoveSet={(idx) => onRemoveSet(ex.id, idx)}
               onUpdateSet={(idx, field, val) => onUpdateSet(ex.id, idx, field, val)}
+              onToggleComplete={(idx) => onToggleComplete(ex.id, idx)}
               onRemove={() => onRemoveExercise(ex.id)}
             />
           ))}
@@ -309,13 +339,13 @@ function ActiveScreen({
             <Text style={styles.addExerciseBtnText}>Añadir ejercicio</Text>
           </Pressable>
 
-          <View style={{ height: 110 }} />
+          <View style={{ height: 120 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* FAB */}
       <Pressable
-        style={[styles.fab, saving && styles.fabDisabled]}
+        style={[styles.fab, { bottom: insets.bottom + 60 }, saving && styles.fabDisabled]}
         onPress={onFinish}
         disabled={saving}
       >
@@ -342,7 +372,7 @@ function ActiveScreen({
 // EXERCISE CARD
 // ============================================================================
 
-function ExerciseCard({ exercise: ex, index, onAddSet, onRemoveSet, onUpdateSet, onRemove }) {
+function ExerciseCard({ exercise: ex, index, onAddSet, onRemoveSet, onUpdateSet, onToggleComplete, onRemove }) {
   return (
     <View style={styles.exerciseCard}>
       {/* Card header */}
@@ -356,38 +386,71 @@ function ExerciseCard({ exercise: ex, index, onAddSet, onRemoveSet, onUpdateSet,
         </Pressable>
       </View>
 
+      {/* Suggestion pill */}
+      {ex.suggestion && (
+        <View style={[
+          styles.suggestionBanner,
+          ex.suggestion.isIncrease ? styles.suggestionBannerUp : styles.suggestionBannerRepeat,
+        ]}>
+          {ex.suggestion.isIncrease && (
+            <TrendingUp size={12} color={theme.accent} strokeWidth={2} />
+          )}
+          <Text style={[
+            styles.suggestionText,
+            ex.suggestion.isIncrease ? styles.suggestionTextUp : styles.suggestionTextRepeat,
+          ]}>
+            {ex.suggestion.isIncrease
+              ? `Sube a ${ex.suggestion.weight} kg × ${ex.suggestion.reps} reps (antes ${ex.suggestion.lastWeight} kg)`
+              : `Repite ${ex.suggestion.weight} kg × ${ex.suggestion.reps} reps — completa todas las series`
+            }
+          </Text>
+        </View>
+      )}
+
       {/* Sets table header */}
       <View style={styles.setHeaderRow}>
         <Text style={[styles.setHeaderCell, styles.colSerie]}>SERIE</Text>
         <Text style={[styles.setHeaderCell, styles.colField]}>REPS</Text>
         <Text style={[styles.setHeaderCell, styles.colField]}>PESO (kg)</Text>
+        <View style={styles.colComplete} />
         <View style={styles.colAction} />
       </View>
 
       {/* Set rows */}
       {ex.sets.map((set, idx) => (
-        <View key={idx} style={styles.setRow}>
+        <View key={idx} style={[styles.setRow, set.completed && styles.setRowCompleted]}>
           <View style={[styles.setNumCell, styles.colSerie]}>
             <Text style={styles.setNumber}>{set.setNumber}</Text>
           </View>
           <TextInput
-            style={[styles.setInput, styles.colField, { marginRight: 8 }]}
+            style={[styles.setInput, styles.colField, { marginRight: 8 }, set.completed && styles.setInputCompleted]}
             value={set.reps}
             onChangeText={v => onUpdateSet(idx, 'reps', v)}
             keyboardType="numeric"
             placeholder="—"
             placeholderTextColor={theme.textDim}
             returnKeyType="done"
+            editable={!set.completed}
           />
           <TextInput
-            style={[styles.setInput, styles.colField]}
+            style={[styles.setInput, styles.colField, set.completed && styles.setInputCompleted]}
             value={set.weight}
             onChangeText={v => onUpdateSet(idx, 'weight', v)}
             keyboardType="numeric"
             placeholder="—"
             placeholderTextColor={theme.textDim}
             returnKeyType="done"
+            editable={!set.completed}
           />
+          <Pressable
+            style={styles.colComplete}
+            onPress={() => onToggleComplete(idx)}
+            hitSlop={8}
+          >
+            <View style={[styles.completeBtnCircle, set.completed && styles.completeBtnCircleActive]}>
+              <Check size={10} color={set.completed ? '#fff' : theme.textDim} strokeWidth={2.5} />
+            </View>
+          </Pressable>
           <Pressable
             style={[styles.colAction, { alignItems: 'center', justifyContent: 'center' }]}
             onPress={() => onRemoveSet(idx)}
@@ -408,23 +471,115 @@ function ExerciseCard({ exercise: ex, index, onAddSet, onRemoveSet, onUpdateSet,
 }
 
 // ============================================================================
+// EXERCISE RESULT CARD
+// ============================================================================
+
+const DIFFICULTY_COLOR = { beginner: '#34c759', intermediate: '#f59e0b', advanced: '#E8442A' }
+
+function ExerciseResultCard({ item, onPress, showBorder }) {
+  const diffColor = DIFFICULTY_COLOR[item.difficulty] ?? theme.textMuted
+  const [imgFailed, setImgFailed] = useState(false)
+
+  return (
+    <Pressable
+      style={[styles.resultRow, showBorder && styles.resultRowBorder]}
+      onPress={onPress}
+    >
+      <View style={styles.exerciseIconBox}>
+        {item.id && !imgFailed ? (
+          <Image
+            source={{ uri: `https://exercisedb.io/image/${item.id}.gif` }}
+            style={styles.exerciseGif}
+            contentFit="cover"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <Dumbbell size={20} color={theme.accent} strokeWidth={1.6} />
+        )}
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={styles.resultName}>{item.name}</Text>
+        <Text style={styles.resultMeta}>
+          {item.target}  ·  {item.equipment}
+        </Text>
+        {item.difficulty ? (
+          <Text style={[styles.resultDifficulty, { color: diffColor }]}>{item.difficulty}</Text>
+        ) : null}
+      </View>
+      <ChevronRight size={14} color={theme.textDim} strokeWidth={2} />
+    </Pressable>
+  )
+}
+
+// ============================================================================
 // ADD EXERCISE MODAL
 // ============================================================================
 
 function AddExerciseModal({ visible, onClose, onAdd }) {
-  const [name, setName] = useState('')
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef(null)
+  const debounceRef = useRef(null)
 
-  function handleAdd() {
-    const trimmed = name.trim()
+  useEffect(() => {
+    if (!visible) {
+      setQuery('')
+      setResults([])
+      setLoading(false)
+    }
+  }, [visible])
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current)
+    const trimmed = query.trim()
+    if (!trimmed) { setResults([]); return }
+    debounceRef.current = setTimeout(() => searchExercises(trimmed), 400)
+    return () => clearTimeout(debounceRef.current)
+  }, [query])
+
+  async function searchExercises(name) {
+    setLoading(true)
+    try {
+      const res = await fetch(
+        `https://exercisedb.p.rapidapi.com/exercises/name/${encodeURIComponent(name)}?limit=8`,
+        {
+          headers: {
+            'X-RapidAPI-Key': EXERCISEDB_API_KEY,
+            'X-RapidAPI-Host': 'exercisedb.p.rapidapi.com',
+          },
+        }
+      )
+      const data = await res.json()
+      setResults(Array.isArray(data) ? data.slice(0, 8) : [])
+    } catch {
+      setResults([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleSelect(exerciseName) {
+    onAdd(exerciseName)
+    setQuery('')
+    setResults([])
+  }
+
+  function handleAddManual() {
+    const trimmed = query.trim()
     if (!trimmed) return
     onAdd(trimmed)
-    setName('')
+    setQuery('')
+    setResults([])
   }
 
   function handleClose() {
-    setName('')
+    setQuery('')
+    setResults([])
     onClose()
   }
+
+  const showEmpty = !loading && query.trim().length > 0 && results.length === 0
 
   return (
     <Modal
@@ -432,35 +587,71 @@ function AddExerciseModal({ visible, onClose, onAdd }) {
       transparent
       animationType="slide"
       onRequestClose={handleClose}
+      onShow={() => inputRef.current?.focus()}
     >
-      <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={styles.modalSheet} onPress={() => {}}>
-          {/* Handle */}
-          <View style={styles.modalHandle} />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.modalOverlay} onPress={handleClose}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Añadir ejercicio</Text>
 
-          <Text style={styles.modalTitle}>Nuevo ejercicio</Text>
+            {/* Search input */}
+            <View style={styles.searchInputWrapper}>
+              <Search size={16} color={theme.textMuted} strokeWidth={2} />
+              <TextInput
+                ref={inputRef}
+                style={styles.searchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar ejercicio..."
+                placeholderTextColor={theme.textMuted}
+                returnKeyType="search"
+              />
+              {loading && <ActivityIndicator size="small" color={theme.textMuted} />}
+              {!loading && query.length > 0 && (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <X size={14} color={theme.textMuted} strokeWidth={2} />
+                </Pressable>
+              )}
+            </View>
 
-          <TextInput
-            style={styles.modalInput}
-            value={name}
-            onChangeText={setName}
-            placeholder="Ej: Press banca, Sentadilla..."
-            placeholderTextColor={theme.textMuted}
-            autoFocus
-            onSubmitEditing={handleAdd}
-            returnKeyType="done"
-          />
+            {/* Results list */}
+            {results.length > 0 && (
+              <ScrollView
+                style={styles.resultsList}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {results.map((item, idx) => (
+                  <ExerciseResultCard
+                    key={item.id || String(idx)}
+                    item={item}
+                    onPress={() => handleSelect(item.name)}
+                    showBorder={idx < results.length - 1}
+                  />
+                ))}
+              </ScrollView>
+            )}
 
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Pressable style={[styles.btnSecondary, { flex: 1 }]} onPress={handleClose}>
+            {/* Empty state + añadir manual */}
+            {showEmpty && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>Sin resultados para "{query.trim()}"</Text>
+                <Pressable onPress={handleAddManual} hitSlop={8} style={{ marginTop: 8 }}>
+                  <Text style={styles.addManualText}>Añadir "{query.trim()}" manualmente</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <Pressable style={[styles.btnSecondary, { marginTop: 12 }]} onPress={handleClose}>
               <Text style={styles.btnSecondaryText}>Cancelar</Text>
             </Pressable>
-            <Pressable style={[styles.btnPrimary, { flex: 1 }]} onPress={handleAdd}>
-              <Text style={styles.btnPrimaryText}>Añadir</Text>
-            </Pressable>
-          </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
@@ -531,10 +722,12 @@ export default function EntrenarScreen() {
     )
   }
 
-  function addExercise(name) {
+  async function addExercise(name) {
+    const { data: { user } } = await supabase.auth.getUser()
+    const suggestion = await getExerciseSuggestion(name, user?.id)
     setExercises(prev => [
       ...prev,
-      { id: Date.now().toString(), name, sets: [{ setNumber: 1, reps: '', weight: '' }] },
+      { id: Date.now().toString(), name, sets: [{ setNumber: 1, reps: '', weight: '', completed: false }], suggestion },
     ])
     setModalVisible(false)
   }
@@ -545,7 +738,7 @@ export default function EntrenarScreen() {
         if (ex.id !== exerciseId) return ex
         return {
           ...ex,
-          sets: [...ex.sets, { setNumber: ex.sets.length + 1, reps: '', weight: '' }],
+          sets: [...ex.sets, { setNumber: ex.sets.length + 1, reps: '', weight: '', completed: false }],
         }
       })
     )
@@ -566,6 +759,17 @@ export default function EntrenarScreen() {
 
   function removeExercise(exerciseId) {
     setExercises(prev => prev.filter(ex => ex.id !== exerciseId))
+  }
+
+  function toggleComplete(exerciseId, idx) {
+    setExercises(prev =>
+      prev.map(ex => {
+        if (ex.id !== exerciseId) return ex
+        const sets = [...ex.sets]
+        sets[idx] = { ...sets[idx], completed: !sets[idx].completed }
+        return { ...ex, sets }
+      })
+    )
   }
 
   function updateSet(exerciseId, idx, field, value) {
@@ -616,6 +820,7 @@ export default function EntrenarScreen() {
           set_number: s.setNumber,
           reps: s.reps !== '' ? parseInt(s.reps, 10) : null,
           weight: s.weight !== '' ? parseFloat(s.weight) : null,
+          completed: s.completed ?? false,
         }))
 
       if (setsToInsert.length > 0) {
@@ -638,16 +843,7 @@ export default function EntrenarScreen() {
   }
 
   if (!isActive) {
-    return (
-      <>
-        <IdleScreen onStart={startWorkout} history={history} />
-        <AddExerciseModal
-          visible={false}
-          onClose={() => {}}
-          onAdd={() => {}}
-        />
-      </>
-    )
+    return <IdleScreen onStart={startWorkout} history={history} />
   }
 
   return (
@@ -661,6 +857,7 @@ export default function EntrenarScreen() {
         onAddSet={addSet}
         onRemoveSet={removeSet}
         onUpdateSet={updateSet}
+        onToggleComplete={toggleComplete}
         onRemoveExercise={removeExercise}
         onFinish={finishWorkout}
         onCancel={cancelWorkout}
@@ -918,6 +1115,38 @@ const styles = StyleSheet.create({
     color: theme.text,
     flex: 1,
   },
+  suggestionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 14,
+    marginTop: 10,
+    marginBottom: 2,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  suggestionBannerUp: {
+    backgroundColor: 'rgba(232,68,42,0.1)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(232,68,42,0.25)',
+  },
+  suggestionBannerRepeat: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  suggestionText: {
+    fontFamily: theme.fontBody,
+    fontSize: 12,
+    flex: 1,
+  },
+  suggestionTextUp: {
+    color: theme.accent,
+  },
+  suggestionTextRepeat: {
+    color: theme.textMuted,
+  },
 
   // ─── Sets table ───
   setHeaderRow: {
@@ -957,6 +1186,32 @@ const styles = StyleSheet.create({
   colAction: {
     width: 28,
     height: 36,
+  },
+  colComplete: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setRowCompleted: {
+    backgroundColor: 'rgba(52,199,89,0.06)',
+  },
+  completeBtnCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: theme.textDim,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeBtnCircleActive: {
+    backgroundColor: 'rgba(52,199,89,0.85)',
+    borderColor: 'rgba(52,199,89,0.85)',
+  },
+  setInputCompleted: {
+    opacity: 0.45,
+    borderColor: 'rgba(255,255,255,0.04)',
   },
   setInput: {
     fontFamily: theme.fontBody,
@@ -1016,6 +1271,7 @@ const styles = StyleSheet.create({
     right: 20,
     borderRadius: 999,
     overflow: 'hidden',
+    zIndex: 10,
     shadowColor: theme.accent,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
@@ -1053,6 +1309,90 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     borderTopWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.1)',
+    maxHeight: '90%',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 0.5,
+    borderColor: theme.borderMid,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: theme.fontBody,
+    fontSize: 16,
+    color: theme.text,
+    paddingVertical: 0,
+  },
+  resultsList: {
+    maxHeight: 300,
+    marginBottom: 4,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    gap: 12,
+  },
+  resultRowBorder: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.border,
+  },
+  exerciseIconBox: {
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+    backgroundColor: 'rgba(232,68,42,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
+  exerciseGif: {
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+  },
+  resultName: {
+    fontFamily: theme.fontBodyMedium,
+    fontSize: 13,
+    color: theme.text,
+    textTransform: 'capitalize',
+  },
+  resultMeta: {
+    fontFamily: theme.fontBody,
+    fontSize: 11,
+    color: theme.textMuted,
+    textTransform: 'capitalize',
+  },
+  resultDifficulty: {
+    fontFamily: theme.fontBody,
+    fontSize: 10.5,
+    textTransform: 'capitalize',
+  },
+  emptyState: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontFamily: theme.fontBody,
+    fontSize: 13,
+    color: theme.textMuted,
+    textAlign: 'center',
+  },
+  addManualText: {
+    fontFamily: theme.fontBody,
+    fontSize: 12,
+    color: theme.textMuted,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
   modalHandle: {
     width: 36,
